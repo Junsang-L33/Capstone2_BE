@@ -1,12 +1,168 @@
+import jwt from "jsonwebtoken";
+
+import { authModel } from "../models/authModel.js";
+
+const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo";
+
 export const authController = {
   googleLogin(_req, res) {
-    return res.status(501).json({
-      success: false,
-      error: {
-        code: "NOT_IMPLEMENTED",
-        message: "GET /auth/google/login 은 아직 구현 전입니다.",
-      },
+    if (
+      !process.env.GOOGLE_CLIENT_ID ||
+      !process.env.GOOGLE_CALLBACK_URL
+    ) {
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: "GOOGLE_OAUTH_CONFIG_MISSING",
+          message: "Google OAuth 설정이 누락되었습니다.",
+        },
+      });
+    }
+
+    const params = new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID,
+      redirect_uri: process.env.GOOGLE_CALLBACK_URL,
+      response_type: "code",
+      scope: "openid email profile",
+      access_type: "offline",
+      prompt: "consent",
     });
+
+    const googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+    return res.redirect(302, googleAuthUrl);
+  },
+
+  async googleCallback(req, res) {
+    try {
+      const { code, error } = req.query;
+
+      if (error) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "GOOGLE_OAUTH_DENIED",
+            message: `Google OAuth 인증이 거부되었습니다: ${error}`,
+          },
+        });
+      }
+
+      if (!code) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "GOOGLE_OAUTH_CODE_MISSING",
+            message: "Google OAuth code가 없습니다.",
+          },
+        });
+      }
+
+      const tokenParams = new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: process.env.GOOGLE_CALLBACK_URL,
+        grant_type: "authorization_code",
+      });
+
+      const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: tokenParams.toString(),
+      });
+
+      if (!tokenResponse.ok) {
+        const tokenError = await tokenResponse.text();
+        return res.status(502).json({
+          success: false,
+          error: {
+            code: "GOOGLE_TOKEN_EXCHANGE_FAILED",
+            message: "Google 토큰 교환에 실패했습니다.",
+            details: tokenError,
+          },
+        });
+      }
+
+      const tokenData = await tokenResponse.json();
+
+      const userInfoResponse = await fetch(GOOGLE_USERINFO_URL, {
+        headers: {
+          Authorization: `Bearer ${tokenData.access_token}`,
+        },
+      });
+
+      if (!userInfoResponse.ok) {
+        const userInfoError = await userInfoResponse.text();
+        return res.status(502).json({
+          success: false,
+          error: {
+            code: "GOOGLE_USERINFO_FETCH_FAILED",
+            message: "Google 사용자 정보 조회에 실패했습니다.",
+            details: userInfoError,
+          },
+        });
+      }
+
+      const googleUser = await userInfoResponse.json();
+
+      if (!googleUser.sub || !googleUser.email) {
+        return res.status(502).json({
+          success: false,
+          error: {
+            code: "GOOGLE_USERINFO_INVALID",
+            message: "Google 사용자 정보가 올바르지 않습니다.",
+          },
+        });
+      }
+
+      let user = await authModel.findByProviderUserId("google", googleUser.sub);
+
+      if (!user) {
+        user = await authModel.createGoogleUser({
+          providerUserId: googleUser.sub,
+          email: googleUser.email,
+          name: googleUser.name || googleUser.email,
+          pictureUrl: googleUser.picture || null,
+        });
+      } else {
+        user = await authModel.updateGoogleLoginProfile(user.id, {
+          email: googleUser.email,
+          name: googleUser.name || googleUser.email,
+          pictureUrl: googleUser.picture || null,
+        });
+      }
+
+      const token = jwt.sign(
+        {
+          sub: user.id,
+          email: user.email,
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: process.env.JWT_EXPIRES_IN || "7d",
+        },
+      );
+
+      res.cookie(process.env.COOKIE_NAME || "tigyeok_session", token, {
+        httpOnly: true,
+        secure: process.env.COOKIE_SECURE === "true",
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      });
+
+      return res.redirect(302, `${process.env.API_BASE_URL || "http://localhost:4000"}/api-docs`);
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: "GOOGLE_CALLBACK_FAILED",
+          message: "Google OAuth callback 처리 중 오류가 발생했습니다.",
+          details: error.message,
+        },
+      });
+    }
   },
 };
-

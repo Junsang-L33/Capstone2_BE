@@ -10,6 +10,15 @@ export const swaggerSpec = {
     version: "0.1.0",
     description: "Backend API skeleton for the capstone project",
   },
+  components: {
+    securitySchemes: {
+      bearerAuth: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+      },
+    },
+  },
   servers: [
     {
       url: process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 4000}`,
@@ -30,8 +39,104 @@ export const swaggerSpec = {
       get: {
         summary: "Google OAuth login entrypoint",
         responses: {
-          "501": {
-            description: "Not implemented yet",
+          "302": {
+            description: "Google OAuth 인증 페이지로 리다이렉트",
+          },
+          "500": {
+            description: "Google OAuth 설정 누락",
+          },
+        },
+      },
+    },
+    "/auth/google/callback": {
+      get: {
+        summary: "Google OAuth callback",
+        parameters: [
+          {
+            name: "code",
+            in: "query",
+            required: false,
+            schema: {
+              type: "string",
+            },
+          },
+          {
+            name: "error",
+            in: "query",
+            required: false,
+            schema: {
+              type: "string",
+            },
+          },
+        ],
+        responses: {
+          "302": {
+            description: "로그인 성공 후 Swagger로 리다이렉트",
+          },
+          "400": {
+            description: "Google OAuth 요청 오류",
+          },
+          "500": {
+            description: "Callback 처리 오류",
+          },
+          "502": {
+            description: "Google API 연동 오류",
+          },
+        },
+      },
+    },
+    "/users/me/profile": {
+      patch: {
+        summary: "로그인 사용자 프로필 저장",
+        tags: ["Users"],
+        security: [
+          {
+            bearerAuth: [],
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  gender: {
+                    type: "string",
+                    enum: ["M", "F", "OTHER", "UNSPECIFIED"],
+                    nullable: true,
+                  },
+                  age: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 130,
+                    nullable: true,
+                  },
+                },
+              },
+              examples: {
+                saveProfile: {
+                  value: {
+                    gender: "M",
+                    age: 24,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description: "프로필 저장 성공",
+          },
+          "400": {
+            description: "입력 검증 실패",
+          },
+          "401": {
+            description: "인증 실패 또는 로그인 필요",
+          },
+          "404": {
+            description: "사용자 없음",
           },
         },
       },
