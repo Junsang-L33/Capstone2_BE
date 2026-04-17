@@ -1,4 +1,5 @@
 import dotenv from "dotenv";
+import swaggerUi from "swagger-ui-express";
 
 dotenv.config();
 
@@ -37,3 +38,11 @@ export const swaggerSpec = {
     },
   },
 };
+
+export default function swaggerSetup(app) {
+  app.get("/swagger.json", (_req, res) => {
+    res.status(200).json(swaggerSpec);
+  });
+
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
