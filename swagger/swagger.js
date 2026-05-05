@@ -231,6 +231,57 @@ export const swaggerSpec = {
         },
       },
     },
+    "/sessions/{sessionId}/inputs": {
+  post: {
+    summary: "세션 원문 입력 제출",
+    tags: ["Inputs"],
+    security: [{ bearerAuth: [] }],
+    parameters: [
+      {
+        name: "sessionId",
+        in: "path",
+        required: true,
+        schema: {
+          type: "string",
+          format: "uuid",
+        },
+      },
+    ],
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            required: ["rawText"],
+            properties: {
+              rawText: {
+                type: "string",
+                example: "오늘 있었던 갈등 상황을 작성합니다.",
+              },
+            },
+          },
+          examples: {
+            submitInput: {
+              value: {
+                rawText: "오늘 있었던 갈등 상황을 작성합니다.",
+              },
+            },
+          },
+        },
+      },
+    },
+    responses: {
+      "201": { description: "입력 저장 성공" },
+      "400": { description: "입력 검증 실패" },
+      "401": { description: "인증 실패 또는 로그인 필요" },
+      "403": { description: "세션 참여자가 아님" },
+      "404": { description: "세션 없음" },
+      "409": { description: "이미 입력 제출됨" },
+      "500": { description: "입력 저장 실패" },
+    },
+  },
+},
   },
 };
 
