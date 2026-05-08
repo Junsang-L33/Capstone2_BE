@@ -22,6 +22,8 @@ export const inputController = {
         rawText: rawText.trim(),
       });
 
+      // 모델서버랑 연결: 입력 저장 이후 분석 API에서 statement 분해 및 FEIN 분류 수행
+
       return res.status(201).json({
         success: true,
         message: "입력이 저장되었습니다.",

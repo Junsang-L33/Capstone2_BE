@@ -9,7 +9,7 @@ export const inputModel = {
 
       const sessionResult = await client.query(
         `
-        SELECT id, status
+        SELECT id, status, mode
         FROM sessions
         WHERE id = $1
         LIMIT 1
@@ -76,8 +76,9 @@ export const inputModel = {
       );
 
       let status = sessionResult.rows[0].status;
+      const requiredInputCount = sessionResult.rows[0].mode === "SINGLE" ? 1 : 2;
 
-      if (countResult.rows[0].count >= 2) {
+      if (countResult.rows[0].count >= requiredInputCount) {
         const updatedSessionResult = await client.query(
           `
           UPDATE sessions

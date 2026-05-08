@@ -9,7 +9,7 @@ const VALID_RELATIONSHIP_TYPES = [
   "OTHER",
 ];
 
-const VALID_MODES = ["DUAL", "SELF"];
+const VALID_MODES = ["DUAL", "SINGLE"];
 
 function isValidRoomPassword(roomPassword) {
   return (
@@ -131,6 +131,16 @@ export const sessionController = {
         return res.status(409).json({
           success: false,
           error: { code: "SESSION_FULL", message: "정원 초과" },
+        });
+      }
+
+      if (error.message === "SINGLE_SESSION_NOT_JOINABLE") {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: "SINGLE_SESSION_NOT_JOINABLE",
+            message: "1인 모드 세션은 추가 참여가 불가능합니다.",
+          },
         });
       }
 
