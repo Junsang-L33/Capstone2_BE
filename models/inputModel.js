@@ -35,6 +35,8 @@ export const inputModel = {
         throw new Error("SESSION_NOT_FOUND");
       }
 
+      const session = sessionResult.rows[0];
+
       const participantResult = await client.query(
         `
         SELECT role
@@ -89,8 +91,8 @@ export const inputModel = {
         [sessionId],
       );
 
-      let status = sessionResult.rows[0].status;
-      const requiredInputCount = sessionResult.rows[0].mode === "SINGLE" ? 1 : 2;
+      let status = session.status;
+      const requiredInputCount = session.mode === "SELF" ? 1 : 2;
 
       if (countResult.rows[0].count >= requiredInputCount) {
         const updatedSessionResult = await client.query(
@@ -112,8 +114,70 @@ export const inputModel = {
       return {
         input: inputResult.rows[0],
         speaker,
+        mode: session.mode,
         status,
       };
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  },
+
+  async getSessionInputs({ sessionId }) {
+    const query = `
+      SELECT speaker, raw_text
+      FROM input_texts
+      WHERE session_id = $1
+      ORDER BY submitted_at ASC
+    `;
+
+    const result = await db.query(query, [sessionId]);
+    return result.rows;
+  },
+
+  async saveStatements({ sessionId, statements }) {
+    if (!statements?.length) return [];
+
+    const client = await db.connect();
+
+    try {
+      await client.query("BEGIN");
+
+      const inserted = [];
+
+      for (const statement of statements) {
+        const row = await client.query(
+          `
+          INSERT INTO statements (
+            session_id,
+            speaker,
+            text,
+            span_start,
+            span_end,
+            label,
+            confidence
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          RETURNING id, session_id, speaker, text, span_start, span_end, label, confidence
+          `,
+          [
+            sessionId,
+            statement.speaker,
+            statement.text,
+            statement.span_start,
+            statement.span_end,
+            statement.label,
+            statement.confidence,
+          ],
+        );
+
+        inserted.push(row.rows[0]);
+      }
+
+      await client.query("COMMIT");
+      return inserted;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

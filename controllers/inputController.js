@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import axios from "axios";
 
 import { inputModel } from "../models/inputModel.js";
 
@@ -8,6 +9,9 @@ const client = new OpenAI({
 
 const MODERATION_MODEL =
   process.env.OPENAI_MODERATION_MODEL || "omni-moderation-latest";
+
+const FEIN_MODEL_BASE_URL =
+  process.env.FEIN_MODEL_BASE_URL || "http://localhost:8000";
 
 async function moderateText(input) {
   const response = await client.moderations.create({
@@ -22,6 +26,39 @@ async function moderateText(input) {
     categories: result.categories,
     category_scores: result.category_scores,
   };
+}
+
+function splitStatements(rawText) {
+  return rawText
+    .split(/(?<=[.!?。！？])\s+|[\n\r]+/)
+    .map((text) => text.trim())
+    .filter(Boolean);
+}
+
+function findSpan(rawText, text) {
+  const index = rawText.indexOf(text);
+
+  if (index === -1) {
+    return {
+      span_start: 0,
+      span_end: text.length,
+    };
+  }
+
+  return {
+    span_start: index,
+    span_end: index + text.length,
+  };
+}
+
+function toStatements(results, speaker, rawText) {
+  return (results || []).map((result) => ({
+    speaker,
+    text: result.text,
+    label: result.label,
+    confidence: result.confidence,
+    ...findSpan(rawText, result.text),
+  }));
 }
 
 export const inputController = {
@@ -62,19 +99,93 @@ export const inputController = {
         userId: req.user.id,
         rawText: cleanedText,
       });
-      
-      // TODO:
-      // AI 분석 파이프라인 연결 예정
-      // 1. rawText → statement 단위 분해
-      // 2. FastAPI 모델 서버 호출
-      // 3. FEIN 분류 결과 수신
-      // 4. statements 테이블 저장
-      // 5. 이후 Alignment / Tension / GeneratedText 생성 단계 연결
+
+      let feinAnalysisStatus = "SKIPPED";
+
+      try {
+        if (result.mode === "SELF") {
+          const statementsInput = splitStatements(cleanedText);
+
+          const classifyResponse = await axios.post(
+            `${FEIN_MODEL_BASE_URL}/internal/fein/classify`,
+            {
+              statements: statementsInput.length ? statementsInput : [cleanedText],
+            },
+          );
+
+          const statements = toStatements(
+            classifyResponse.data?.data?.results,
+            result.speaker,
+            cleanedText,
+          );
+
+          await inputModel.saveStatements({
+            sessionId,
+            statements,
+          });
+
+          feinAnalysisStatus = "DONE";
+        }
+
+        if (result.mode === "DUAL" && result.status === "READY") {
+          const inputs = await inputModel.getSessionInputs({ sessionId });
+
+          const aInput = inputs.find((row) => row.speaker === "A");
+          const bInput = inputs.find((row) => row.speaker === "B");
+
+          const aStatementsInput = aInput ? splitStatements(aInput.raw_text) : [];
+          const bStatementsInput = bInput ? splitStatements(bInput.raw_text) : [];
+
+          const analyzeResponse = await axios.post(
+            `${FEIN_MODEL_BASE_URL}/internal/fein/analyze-dual`,
+            {
+              a_statements: aStatementsInput.length
+                ? aStatementsInput
+                : aInput
+                  ? [aInput.raw_text]
+                  : [],
+              b_statements: bStatementsInput.length
+                ? bStatementsInput
+                : bInput
+                  ? [bInput.raw_text]
+                  : [],
+            },
+          );
+
+          const aStatements = toStatements(
+            analyzeResponse.data?.data?.a_results,
+            "A",
+            aInput?.raw_text || "",
+          );
+
+          const bStatements = toStatements(
+            analyzeResponse.data?.data?.b_results,
+            "B",
+            bInput?.raw_text || "",
+          );
+
+          await inputModel.saveStatements({
+            sessionId,
+            statements: [...aStatements, ...bStatements],
+          });
+
+          feinAnalysisStatus = "DONE";
+        }
+      } catch (feinError) {
+        feinAnalysisStatus = "FAILED";
+        console.error(
+          "FEIN model analysis failed",
+          feinError?.response?.data || feinError,
+        );
+      }
 
       return res.status(201).json({
         success: true,
         message: "입력이 저장되었습니다.",
-        data: result,
+        data: {
+          ...result,
+          feinAnalysisStatus,
+        },
       });
     } catch (error) {
       if (error.message === "SESSION_NOT_FOUND") {
