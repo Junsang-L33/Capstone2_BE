@@ -10,12 +10,13 @@ import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
 
 // Routes
+import analysisRoutes from "./routes/analysisRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import inputRoutes from "./routes/inputRoutes.js";
+import llmRoutes from "./routes/llmRoutes.js";
+import sessionRoutes from "./routes/sessionRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import swaggerSetup from "./swagger/swagger.js";
-import sessionRoutes from "./routes/sessionRoutes.js";
-import inputRoutes from "./routes/inputRoutes.js";
-import analysisRoutes from "./routes/analysisRoutes.js";
 
 dotenv.config();
 
@@ -48,11 +49,13 @@ app.use(
 app.use(cookieParser());
 
 // Routes Mounting
-app.use("/auth", authRoutes);
-app.use("/users", userRoutes);
-app.use("/sessions", sessionRoutes);
-app.use("/sessions", inputRoutes);
 app.use("/sessions", analysisRoutes);
+app.use("/auth", authRoutes);
+app.use("/sessions", inputRoutes);
+app.use("/llm", llmRoutes);
+app.use("/sessions", sessionRoutes);
+app.use("/users", userRoutes);
+
 // Swagger
 swaggerSetup(app);
 
