@@ -1,6 +1,20 @@
 import { db } from "../config/db.js";
 
 export const inputModel = {
+  async blockSession({ sessionId }) {
+    const query = `
+      UPDATE sessions
+      SET status = 'BLOCKED',
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, status, updated_at
+    `;
+
+    const result = await db.query(query, [sessionId]);
+
+    return result.rows[0] || null;
+  },
+
   async submitInput({ sessionId, userId, rawText }) {
     const client = await db.connect();
 

@@ -1,4 +1,28 @@
+import OpenAI from "openai";
+
 import { inputModel } from "../models/inputModel.js";
+
+const client = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const MODERATION_MODEL =
+  process.env.OPENAI_MODERATION_MODEL || "omni-moderation-latest";
+
+async function moderateText(input) {
+  const response = await client.moderations.create({
+    model: MODERATION_MODEL,
+    input,
+  });
+
+  const result = response.results[0];
+
+  return {
+    flagged: result.flagged,
+    categories: result.categories,
+    category_scores: result.category_scores,
+  };
+}
 
 export const inputController = {
   async submitInput(req, res) {
@@ -16,13 +40,36 @@ export const inputController = {
         });
       }
 
+      const cleanedText = rawText.trim();
+
+      const moderationResult = await moderateText(cleanedText);
+
+      if (moderationResult.flagged) {
+        await inputModel.blockSession({ sessionId });
+
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: "INPUT_BLOCKED",
+            message: "위험 신호가 감지되어 입력이 차단되었습니다.",
+            details: moderationResult,
+          },
+        });
+      }
+
       const result = await inputModel.submitInput({
         sessionId,
         userId: req.user.id,
-        rawText: rawText.trim(),
+        rawText: cleanedText,
       });
-
-      // 모델서버랑 연결: 입력 저장 이후 분석 API에서 statement 분해 및 FEIN 분류 수행
+      
+      // TODO:
+      // AI 분석 파이프라인 연결 예정
+      // 1. rawText → statement 단위 분해
+      // 2. FastAPI 모델 서버 호출
+      // 3. FEIN 분류 결과 수신
+      // 4. statements 테이블 저장
+      // 5. 이후 Alignment / Tension / GeneratedText 생성 단계 연결
 
       return res.status(201).json({
         success: true,
