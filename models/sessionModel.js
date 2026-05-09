@@ -10,6 +10,7 @@ export const sessionModel = {
       await client.query("BEGIN");
 
       const roomPasswordHash = await bcrypt.hash(roomPassword, 10);
+      const ownerRole = mode === "SINGLE" ? "SELF" : "A";
 
       const sessionResult = await client.query(
         `
@@ -38,17 +39,17 @@ export const sessionModel = {
           role,
           joined_at
         )
-        VALUES ($1, $2, 'A', NOW())
+        VALUES ($1, $2, $3, NOW())
         RETURNING id, session_id, user_id, role, joined_at
         `,
-        [session.id, ownerUserId],
+        [session.id, ownerUserId, ownerRole],
       );
 
       await client.query("COMMIT");
 
       return {
         ...session,
-        role: "A",
+        role: ownerRole,
         participant: participantResult.rows[0],
         inviteLink: `${process.env.FRONTEND_URL}/invite/${session.id}`,
       };
@@ -79,6 +80,10 @@ export const sessionModel = {
       if (!sessionResult.rows.length) throw new Error("SESSION_NOT_FOUND");
 
       const session = sessionResult.rows[0];
+
+      if (session.mode === "SINGLE") {
+        throw new Error("SINGLE_SESSION_NOT_JOINABLE");
+      }
 
       const isValidPassword = await bcrypt.compare(
         roomPassword,

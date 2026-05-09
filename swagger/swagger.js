@@ -209,7 +209,7 @@ export const swaggerSpec = {
                   },
                   mode: {
                     type: "string",
-                    enum: ["DUAL", "SELF"],
+                    enum: ["DUAL", "SINGLE"],
                     default: "DUAL",
                  },
                 roomPassword: {
