@@ -403,67 +403,6 @@ export const swaggerSpec = {
         },
       },
     },
-    "/llm/sessions/{sessionId}/summary": {
-      get: {
-        summary: "갈등 설명 생성 (LLM)",
-        tags: ["LLM"],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: "sessionId",
-            in: "path",
-            required: true,
-            schema: {
-              type: "string",
-            },
-          },
-        ],
-        responses: {
-          "200": {
-            description: "설명 생성 성공",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    success: { type: "boolean" },
-                    summary: { type: "string" },
-                  },
-                },
-              },
-            },
-          },
-          "404": { description: "갈등 결과 없음" },
-          "500": { description: "생성 실패" },
-        },
-      },
-    },
-    "/llm/sessions/{sessionId}/perspective": {
-      get: {
-        summary: "A/B 각각 관점 설명",
-        tags: ["LLM"],
-        security: [{ bearerAuth: [] }],
-        parameters: [
-          {
-            name: "sessionId",
-            in: "path",
-            required: true,
-            schema: { type: "string" },
-          },
-        ],
-        responses: {
-          "200": {
-            description: "관점 설명 생성 성공",
-          },
-          "404": {
-            description: "데이터 부족",
-          },
-          "500": {
-            description: "생성 실패",
-          },
-        },
-      },
-    },
     "/llm/sessions/{sessionId}/analysis": {
       get: {
         summary: "갈등 분석 결과 생성 (1인/2인 자동 분기)",
@@ -474,9 +413,7 @@ export const swaggerSpec = {
             name: "sessionId",
             in: "path",
             required: true,
-            schema: {
-              type: "string",
-            },
+            schema: { type: "string" },
             description: "세션 ID",
           },
         ],
@@ -488,16 +425,11 @@ export const swaggerSpec = {
                 schema: {
                   type: "object",
                   properties: {
-                    success: {
-                      type: "boolean",
-                      example: true,
-                    },
-                    mode: {
-                      type: "string",
-                      example: "DUAL",
-                    },
+                    success: { type: "boolean", example: true },
+                    mode: { type: "string", example: "DUAL" },
                     data: {
                       type: "string",
+                      description: "갈등 분석 결과 텍스트",
                       example: "갈등이 가장 컸던 지점 ...",
                     },
                   },
@@ -505,12 +437,8 @@ export const swaggerSpec = {
               },
             },
           },
-          "404": {
-            description: "세션 없음 또는 데이터 부족",
-          },
-          "500": {
-            description: "LLM 처리 실패",
-          },
+          "404": { description: "세션 없음 또는 데이터 부족" },
+          "500": { description: "LLM 처리 실패" },
         },
       },
     },
