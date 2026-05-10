@@ -48,6 +48,30 @@ export const swaggerSpec = {
         },
       },
     },
+    "/auth/google/logout": {
+      post: {
+        summary: "로그아웃",
+        tags: ["Auth"],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "로그아웃 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    message: { type: "string", example: "로그아웃 성공" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { description: "인증 실패" }
+        }
+      }
+    },
     "/auth/google/callback": {
       get: {
         summary: "Google OAuth callback",
@@ -257,193 +281,164 @@ export const swaggerSpec = {
       },
     },
     "/sessions/{sessionId}/inputs": {
-  post: {
-    summary: "세션 원문 입력 제출",
-    tags: ["Inputs"],
-    security: [{ bearerAuth: [] }],
-    parameters: [
-      {
-        name: "sessionId",
-        in: "path",
-        required: true,
-        schema: {
-          type: "string",
-          format: "uuid",
-        },
-      },
-    ],
-    requestBody: {
-      required: true,
-      content: {
-        "application/json": {
-          schema: {
-            type: "object",
-            required: ["rawText"],
-            properties: {
-              rawText: {
-                type: "string",
-                example: "오늘 있었던 갈등 상황을 작성합니다.",
-              },
+      post: {
+        summary: "세션 원문 입력 제출",
+        tags: ["Inputs"],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "sessionId",
+            in: "path",
+            required: true,
+            schema: {
+              type: "string",
+              format: "uuid",
             },
           },
-          examples: {
-            submitInput: {
-              value: {
-                rawText: "오늘 있었던 갈등 상황을 작성합니다.",
-              },
-            },
-          },
-        },
-      },
-    },
-    responses: {
-      "201": { description: "입력 저장 성공" },
-      "400": { description: "입력 검증 실패" },
-      "401": { description: "인증 실패 또는 로그인 필요" },
-      "403": { description: "세션 참여자가 아님" },
-      "404": { description: "세션 없음" },
-      "409": { description: "이미 입력 제출됨" },
-      "500": { description: "입력 저장 실패" },
-    },
-  },
-},
-"/sessions/{sessionId}/analysis": {
-  get: {
-    tags: ["Analysis"],
-    summary: "세션 분석 결과 조회",
-    description: "세션의 FEIN 분석 결과(statements)를 조회합니다.",
-    security: [{ bearerAuth: [] }],
-    parameters: [
-      {
-        in: "path",
-        name: "sessionId",
-        required: true,
-        schema: {
-          type: "string",
-          format: "uuid",
-        },
-        description: "세션 ID",
-      },
-    ],
-    responses: {
-      200: {
-        description: "분석 결과 조회 성공",
-        content: {
-          "application/json": {
-            example: {
-              success: true,
-              message: "분석 결과 조회 성공",
-              data: {
-                session: {
-                  id: "77605395-0c16-4156-a4a9-6951e91582be",
-                  status: "READY",
-                  relationship_type: "COUPLE",
-                  mode: "DUAL",
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["rawText"],
+                properties: {
+                  rawText: {
+                    type: "string",
+                    example: "오늘 있었던 갈등 상황을 작성합니다.",
+                  },
                 },
-                statements: [
-                  {
-                    id: "statement-id",
-                    speaker: "A",
-                    text: "어제 너가 약속 시간보다 30분 늦었어",
-                    spanStart: 0,
-                    spanEnd: 22,
-                    label: "FACT",
-                    confidence: 0.9958,
+              },
+              examples: {
+                submitInput: {
+                  value: {
+                    rawText: "오늘 있었던 갈등 상황을 작성합니다.",
                   },
-                  {
-                    id: "statement-id",
-                    speaker: "A",
-                    text: "나는 서운했어",
-                    spanStart: 23,
-                    spanEnd: 34,
-                    label: "EMOTION",
-                    confidence: 0.9412,
-                  },
-                ],
+                },
               },
             },
           },
         },
-      },
-
-      403: {
-        description: "세션 참여자가 아님",
-      },
-
-      404: {
-        description: "세션 없음",
-      },
-
-      500: {
-        description: "서버 오류",
+        responses: {
+          "201": { description: "입력 저장 성공" },
+          "400": { description: "입력 검증 실패" },
+          "401": { description: "인증 실패 또는 로그인 필요" },
+          "403": { description: "세션 참여자가 아님" },
+          "404": { description: "세션 없음" },
+          "409": { description: "이미 입력 제출됨" },
+          "500": { description: "입력 저장 실패" },
+        },
       },
     },
-  },
-},
-    "/sessions/{sessionId}/analysis-status": {
+    
+    "/sessions/{sessionId}/status": {
       get: {
-        tags: ["Analysis"],
-        summary: "세션 분석 상태 조회",
+        summary: "세션 상태 조회",
+        description: "현재 세션의 상태, 사용자 역할, 입력 완료 여부를 반환합니다.",
+        tags: ["Sessions"],
         security: [{ bearerAuth: [] }],
         parameters: [
           {
-            in: "path",
             name: "sessionId",
+            in: "path",
             required: true,
             schema: {
               type: "string",
               format: "uuid",
             },
+            description: "조회할 세션 ID",
           },
         ],
         responses: {
-          200: {
-            description: "분석 상태 조회 성공",
+          "200": {
+            description: "세션 상태 조회 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: {
+                      type: "boolean",
+                      example: true,
+                    },
+                    data: {
+                      type: "object",
+                      properties: {
+                        sessionId: {
+                          type: "string",
+                          example: "b3c1e2d4-1234-5678-9abc-abcdef123456",
+                        },
+                        status: {
+                          type: "string",
+                          example: "ANALYZING",
+                          description: "세션 상태 (WAITING_INPUT / ANALYZING / COMPLETED 등)",
+                        },
+                        myRole: {
+                          type: "string",
+                          example: "A",
+                          description: "현재 사용자의 역할",
+                        },
+                        bothSubmitted: {
+                          type: "boolean",
+                          example: true,
+                          description: "양측 입력 완료 여부",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
-          403: {
-            description: "세션 참여자가 아님",
+          "401": {
+            description: "인증 실패 또는 로그인 필요",
           },
-          404: {
-            description: "세션 없음",
+          "404": {
+            description: "세션을 찾을 수 없음",
           },
-          500: {
-            description: "서버 오류",
+          "500": {
+            description: "세션 상태 조회 실패",
           },
         },
       },
     },
-    "/sessions/{sessionId}/results/dual": {
+    "/llm/sessions/{sessionId}/analysis": {
       get: {
-        tags: ["Analysis"],
-        summary: "2인 모드 분석 결과 조회",
+        summary: "갈등 분석 결과 생성 (1인/2인 자동 분기)",
+        tags: ["LLM"],
         security: [{ bearerAuth: [] }],
         parameters: [
           {
-            in: "path",
             name: "sessionId",
+            in: "path",
             required: true,
-            schema: {
-              type: "string",
-              format: "uuid",
-            },
+            schema: { type: "string" },
+            description: "세션 ID",
           },
         ],
         responses: {
-          200: {
-            description: "2인 모드 결과 조회 성공",
+          "200": {
+            description: "분석 성공",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    success: { type: "boolean", example: true },
+                    mode: { type: "string", example: "DUAL" },
+                    data: {
+                      type: "string",
+                      description: "갈등 분석 결과 텍스트",
+                      example: "갈등이 가장 컸던 지점 ...",
+                    },
+                  },
+                },
+              },
+            },
           },
-          403: {
-            description: "세션 참여자가 아님",
-          },
-          404: {
-            description: "세션 없음",
-          },
-          409: {
-            description: "2인 모드 세션이 아님",
-          },
-          500: {
-            description: "서버 오류",
-          },
+          "404": { description: "세션 없음 또는 데이터 부족" },
+          "500": { description: "LLM 처리 실패" },
         },
       },
     },
