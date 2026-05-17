@@ -17,13 +17,17 @@ const EMPTY_SECTIONS = {
 };
 
 const EMPTY_DIAGRAM_KEYWORDS = {
-  coreConflict: [],
-  facts: [],
-  interpretations: [],
-  emotions: [],
-  needs: [],
-  relationshipShift: [],
-  questions: [],
+  common: {
+    coreConflict: [],
+    facts: [],
+    interpretations: [],
+    emotions: [],
+    needs: [],
+    relationshipShift: [],
+    questions: [],
+  },
+  a: { facts: [], interpretations: [], emotions: [], needs: [] },
+  b: { facts: [], interpretations: [], emotions: [], needs: [] },
 };
 
 function formatStatements(statements) {
@@ -77,6 +81,8 @@ function buildJsonContract(mode) {
       : `{ "a": "A 입장 문장", "b": "B 입장 문장" }`;
 
   return `
+  if (mode === "SINGLE") {
+    return 
 반드시 아래 JSON 객체 하나만 반환하세요. 마크다운 코드블록은 쓰지 마세요.
 {
   "resultText": "결과 화면 상단이나 상세 보기에서 그대로 보여줄 전체 분석문",
@@ -366,7 +372,7 @@ export const llmController = {
     }
   },
 
-  async generateAnalysis(req, res) {
+    async generateAnalysis(req, res) {
     try {
       const { sessionId } = req.params;
       const context = await llmModel.getSessionContext({
@@ -397,6 +403,35 @@ export const llmController = {
         data: savedResult,
       });
     } catch (error) {
+      return sendControllerError(res, error);
+    }
+  },
+
+  async getEvidence(req, res) {
+    try {
+      const { sessionId } = req.params;
+
+      const result = await llmModel.getEvidenceBySessionId({
+        sessionId,
+        userId: req.user.id,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "LLM 원문 근거 데이터 조회 성공",
+        data: result,
+      });
+    } catch (error) {
+      if (error.message === "LLM_RESULT_NOT_FOUND") {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: "LLM_RESULT_NOT_FOUND",
+            message: "저장된 LLM 결과가 없습니다.",
+          },
+        });
+      }
+
       return sendControllerError(res, error);
     }
   },

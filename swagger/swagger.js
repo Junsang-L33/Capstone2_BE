@@ -429,7 +429,7 @@ export const swaggerSpec = {
     },
     "/sessions/{sessionId}/results/dual": {
       get: {
-        summary: "2인 모드 분석 결과 조회",
+        summary: "2인 모드 모델 분석 결과 조회",
         description:
           "실제 요청 URI는 /sessions/{sessionId}/results/dual 입니다. 2인 모드 세션에서 statement 분류 결과, 대응 문장 정렬 결과, 공통 지점, 핵심 긴장요인을 반환합니다.",
         tags: ["Analysis"],
@@ -733,6 +733,164 @@ export const swaggerSpec = {
         },
       },
     },
+    "/sessions/history": {
+  get: {
+    summary: "과거 세션 목록 조회",
+    tags: ["History"],
+    security: [{ bearerAuth: [] }],
+    responses: {
+      "200": {
+        description: "히스토리 조회 성공",
+      },
+      "401": {
+        description: "인증 실패 또는 로그인 필요",
+      },
+      "500": {
+        description: "히스토리 조회 실패",
+      },
+    },
+  },
+},
+"/llm/sessions/{sessionId}/evidence": {
+  get: {
+    summary: "LLM 대표 키워드 원문 근거 조회",
+    description:
+      "LLM 결과의 대표 키워드별 원문 근거 데이터를 조회합니다.",
+    tags: ["LLM"],
+    security: [{ bearerAuth: [] }],
+
+    parameters: [
+      {
+        name: "sessionId",
+        in: "path",
+        required: true,
+        schema: {
+          type: "string",
+          format: "uuid",
+        },
+        description: "조회할 세션 ID",
+      },
+    ],
+
+    responses: {
+      "200": {
+        description: "LLM 원문 근거 데이터 조회 성공",
+        content: {
+          "application/json": {
+            example: {
+              success: true,
+              message: "LLM 원문 근거 데이터 조회 성공",
+              data: {
+                sessionId:
+                  "5f2748d9-eb79-4064-9eb7-b8281e17c8ef",
+
+                mode: "DUAL",
+
+                keywordEvidence: {
+                  emotions: [
+                    {
+                      keyword: "서운함",
+
+                      label: "EMOTION",
+
+                      evidence: [
+                        {
+                          statementId:
+                            "524c4caa-7b75-41d5-8a30-8f1ab6b4361a",
+
+                          speaker: "A",
+
+                          text:
+                            "연락 한 통 없는 게 너무 서운했어",
+
+                          label: "EMOTION",
+
+                          confidence: 0.9921,
+
+                          confidencePercent: 99,
+
+                          similarity: 0.7124,
+
+                          similarityPercent: 71,
+
+                          spanStart: 14,
+
+                          spanEnd: 33,
+                        },
+                      ],
+                    },
+                  ],
+
+                  facts: [],
+
+                  interpretations: [],
+
+                  needs: [],
+                },
+
+                tensions: [
+                  {
+                    id:
+                      "34696e42-8db1-4618-8a45-942b3c671fa1",
+
+                    type: "PERSPECTIVE_GAP",
+
+                    rationale:
+                      "한쪽은 사실을 중심으로 이야기하고 다른 한쪽은 상황 해석에 집중하고 있습니다.",
+
+                    evidence: [
+                      {
+                        statementId:
+                          "524c4caa-7b75-41d5-8a30-8f1ab6b4361a",
+
+                        speaker: "A",
+
+                        text:
+                          "연락 한 통 없는 게 너무 서운했어",
+
+                        label: "EMOTION",
+
+                        confidence: 0.9921,
+
+                        confidencePercent: 99,
+
+                        spanStart: 14,
+
+                        spanEnd: 33,
+                      },
+                    ],
+                  },
+                ],
+
+                createdAt:
+                  "2026-05-16T03:10:22.121Z",
+
+                updatedAt:
+                  "2026-05-16T03:10:22.121Z",
+              },
+            },
+          },
+        },
+      },
+
+      "401": {
+        description: "인증 실패",
+      },
+
+      "403": {
+        description: "세션 참여자가 아님",
+      },
+
+      "404": {
+        description: "저장된 LLM 결과 없음",
+      },
+
+      "500": {
+        description: "LLM 원문 근거 데이터 조회 실패",
+      },
+    },
+  },
+},
   },
 };
 
