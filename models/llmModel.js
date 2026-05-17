@@ -1,6 +1,14 @@
 import crypto from "crypto";
+import OpenAI from "openai";
 
 import { db } from "../config/db.js";
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+const EMBEDDING_MODEL =
+  process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small";
 
 let llmResultsTableReady = false;
 
@@ -110,6 +118,137 @@ async function getSessionAndParticipant({ sessionId, userId }) {
 
   return result.rows[0];
 }
+const SECTION_TO_LABEL = {
+  facts: "FACT",
+  emotions: "EMOTION",
+  interpretations: "INTERPRETATION",
+  needs: "NEED",
+};
+
+function normalizeKeywords(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+}
+
+function toEvidenceStatement(statement, extra = {}) {
+  const confidence = Number(statement.confidence);
+
+  return {
+    statementId: statement.id || statement.statementId,
+    speaker: statement.speaker,
+    text: statement.text,
+    label: statement.label,
+    confidence: Number.isFinite(confidence) ? confidence : null,
+    confidencePercent: Number.isFinite(confidence)
+      ? Math.round(confidence * 100)
+      : null,
+    spanStart: statement.spanStart ?? statement.span_start ?? 0,
+    spanEnd: statement.spanEnd ?? statement.span_end ?? statement.text?.length ?? 0,
+    ...extra,
+  };
+}
+
+async function createEmbeddings(texts) {
+  if (!texts.length) return [];
+
+  const response = await openai.embeddings.create({
+    model: EMBEDDING_MODEL,
+    input: texts,
+  });
+
+  return response.data.map((item) => item.embedding);
+}
+
+function cosineSimilarity(a, b) {
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < a.length; i += 1) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+
+  if (!normA || !normB) return 0;
+
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+async function buildKeywordEvidence({ diagramKeywords, statements }) {
+  const result = {};
+
+  for (const section of ["facts", "emotions", "interpretations", "needs"]) {
+    const label = SECTION_TO_LABEL[section];
+    const keywords = normalizeKeywords(diagramKeywords?.[section]);
+
+    const sectionStatements = statements.filter(
+      (statement) => statement.label === label,
+    );
+
+    if (!keywords.length || !sectionStatements.length) {
+      result[section] = keywords.map((keyword) => ({
+        keyword,
+        label,
+        evidence: [],
+      }));
+      continue;
+    }
+
+    const keywordEmbeddings = await createEmbeddings(keywords);
+    const statementTexts = sectionStatements.map((statement) => statement.text);
+    const statementEmbeddings = await createEmbeddings(statementTexts);
+
+    result[section] = keywords.map((keyword, keywordIndex) => {
+      const evidence = sectionStatements
+        .map((statement, statementIndex) => {
+          const keywordSimilarity = cosineSimilarity(
+            keywordEmbeddings[keywordIndex],
+            statementEmbeddings[statementIndex],
+          );
+
+          return toEvidenceStatement(statement, {
+            keywordSimilarity,
+            keywordSimilarityPercent: Math.round(keywordSimilarity * 100),
+          });
+        })
+        .sort((a, b) => {
+          if (b.keywordSimilarity !== a.keywordSimilarity) {
+            return b.keywordSimilarity - a.keywordSimilarity;
+          }
+
+          return (b.confidence ?? 0) - (a.confidence ?? 0);
+        })
+        .slice(0, 3);
+
+      return {
+        keyword,
+        label,
+        evidence,
+      };
+    });
+  }
+
+  return result;
+}
+
+function keywordMatchScore(keyword, text) {
+  if (!keyword || !text) return 0;
+
+  const normalizedKeyword = keyword.replace(/\s+/g, "");
+  const normalizedText = text.replace(/\s+/g, "");
+
+  if (normalizedText.includes(normalizedKeyword)) return 2;
+
+  const keywordParts = normalizedKeyword
+    .split(/[,/·ㆍ\-\s]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (keywordParts.some((part) => normalizedText.includes(part))) return 1;
+
+  return 0;
+}
+
 
 export const llmModel = {
   async getSessionContext({ sessionId, userId }) {
@@ -155,7 +294,7 @@ export const llmModel = {
       ORDER BY t.created_at ASC, t.id ASC, s.span_start ASC
       `,
       [sessionId],
-    );
+    );0
 
     const tensionsById = new Map();
 
@@ -349,8 +488,54 @@ export const llmModel = {
         JSON.stringify(structuredResult || {}),
         JSON.stringify(sourceSnapshot || {}),
       ],
+      
     );
 
     return mapLlmResult(result.rows[0]);
+  },
+    async getEvidenceBySessionId({ sessionId, userId }) {
+    await ensureLlmResultsTable();
+    await getSessionAndParticipant({ sessionId, userId });
+
+    const result = await db.query(
+      `
+      SELECT
+        session_id,
+        mode,
+        structured_result,
+        source_snapshot,
+        created_at,
+        updated_at
+      FROM llm_results
+      WHERE session_id = $1
+      LIMIT 1
+      `,
+      [sessionId],
+    );
+
+    if (!result.rows.length) {
+      throw new Error("LLM_RESULT_NOT_FOUND");
+    }
+
+    const row = result.rows[0];
+    const structuredResult = row.structured_result || {};
+    const sourceSnapshot = row.source_snapshot || {};
+
+    return {
+      sessionId: row.session_id,
+      mode: row.mode,
+      keywordEvidence: await buildKeywordEvidence({
+  diagramKeywords: structuredResult.diagramKeywords || {},
+  statements: sourceSnapshot.statements || [],
+}),
+      tensions: (sourceSnapshot.tensions || []).map((tension) => ({
+        id: tension.id,
+        type: tension.type,
+        rationale: tension.rationale,
+        evidence: (tension.evidence || []).map(toEvidenceStatement),
+      })),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
   },
 };

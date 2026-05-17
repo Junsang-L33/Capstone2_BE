@@ -7,5 +7,5 @@ const router = express.Router();
 router.get("/self/results", requireAuth, llmController.getSelfResults);
 router.get("/sessions/:sessionId/analysis", requireAuth, llmController.getAnalysis);
 router.post("/sessions/:sessionId/analysis", requireAuth, llmController.generateAnalysis);
-
+router.get("/sessions/:sessionId/evidence", requireAuth, llmController.getEvidence,);
 export default router;

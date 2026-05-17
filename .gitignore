@@ -1,8 +1,16 @@
 node_modules/
 .env
 .env.local
+**/.env
 dist/
 coverage/
 *.log
 .DS_Store
+__MACOSX/
+__pycache__/
+*.pyc
+.venv/
+.python-packages/
+cap2_modelserver/.venv/
+cap2_modelserver/.python-packages/
 
